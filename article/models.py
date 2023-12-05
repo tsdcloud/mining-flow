@@ -1,6 +1,7 @@
 from django.db import models
-from django.db import DatabaseError, transaction
-from common.models import BaseUUIDModel, BaseHistoryModel
+from common.models import BaseUUIDModel
+import json
+from datetime import datetime
 
 # Create your models here.
 
@@ -17,19 +18,6 @@ class Categorie(BaseUUIDModel):
         """ name in the administration """
         return "(%s)" % (self.name)
 
-    @staticmethod
-    def insertHistory(categorie: "Categorie", user: str, operation: int):
-        hcategorie = HCategorie()
-        hcategorie.categorie = categorie
-        hcategorie.name = categorie.name
-        hcategorie.is_active = categorie.is_active
-        hcategorie.date = categorie.date
-        hcategorie.operation = operation
-        hcategorie.user = user
-
-        hcategorie.save()
-
-    @staticmethod
     def create(
         name: str,
         user: str
@@ -42,14 +30,13 @@ class Categorie(BaseUUIDModel):
             categorie = Categorie()
             categorie.name = name.upper()
 
-        try:
-            with transaction.atomic():
-                categorie.save()
-                Categorie.insertHistory(
-                    categorie=categorie, user=user, operation=1)
-            return categorie
-        except DatabaseError:
-            return None
+        categorie._change_reason = json.dumps({
+            "reason": "Add a new categorie",
+            "user": user
+        })
+        categorie._history_date = datetime.now()
+        categorie.save()
+        return categorie
 
     def change(
         self,
@@ -59,37 +46,37 @@ class Categorie(BaseUUIDModel):
         """ change categorie """
         self.name = name.upper()
 
-        try:
-            with transaction.atomic():
-                self.save()
-                Categorie.insertHistory(categorie=self, user=user, operation=2)
-            return self
-        except DatabaseError:
-            return None
+        self._change_reason = json.dumps({
+            "reason": "Update categorie",
+            "user": user
+        })
+        self._history_date = datetime.now()
+        self.save()
+        return self
 
     def delete(self, user: str):
         """ delete categorie """
         self.is_active = False
 
-        try:
-            with transaction.atomic():
-                self.save()
-                Categorie.insertHistory(categorie=self, user=user, operation=3)
-            return self
-        except DatabaseError:
-            return None
+        self._change_reason = json.dumps({
+            "reason": "Delete categorie",
+            "user": user
+        })
+        self._history_date = datetime.now()
+        self.save()
+        return self
 
     def restore(self, user: str):
         """ active motive previously disabled """
         self.is_active = True
 
-        try:
-            with transaction.atomic():
-                self.save()
-                Categorie.insertHistory(categorie=self, user=user, operation=4)
-            return self
-        except DatabaseError:
-            return None
+        self._change_reason = json.dumps({
+            "reason": "Restore categorie",
+            "user": user
+        })
+        self._history_date = datetime.now()
+        self.save()
+        return self
 
 
 class Article(BaseUUIDModel):
@@ -110,19 +97,6 @@ class Article(BaseUUIDModel):
         return "(%s)" % (self.name)
 
     @staticmethod
-    def insertHistory(article: "Article", user: str, operation: int):
-        harticle = HArticle()
-        harticle.article = article
-        harticle.categorie = article.categorie
-        harticle.name = article.name
-        harticle.is_active = article.is_active
-        harticle.date = article.date
-        harticle.operation = operation
-        harticle.user = user
-
-        harticle.save()
-
-    @staticmethod
     def create(
         name: str,
         categorie: Categorie,
@@ -137,14 +111,13 @@ class Article(BaseUUIDModel):
             article.name = name.upper()
         article.categorie = categorie
 
-        try:
-            with transaction.atomic():
-                article.save()
-                Article.insertHistory(
-                    article=article, user=user, operation=1)
-            return article
-        except DatabaseError:
-            return None
+        article._change_reason = json.dumps({
+            "reason": "Add a new article",
+            "user": user
+        })
+        article._history_date = datetime.now()
+        article.save()
+        return article
 
     def change(
         self,
@@ -154,56 +127,34 @@ class Article(BaseUUIDModel):
         """ change article """
         self.name = name.upper()
 
-        try:
-            with transaction.atomic():
-                self.save()
-                Article.insertHistory(article=self, user=user, operation=2)
-            return self
-        except DatabaseError:
-            return None
+        self._change_reason = json.dumps({
+            "reason": "Update article",
+            "user": user
+        })
+        self._history_date = datetime.now()
+        self.save()
+        return self
 
     def delete(self, user: str):
         """ delete article """
         self.is_active = False
 
-        try:
-            with transaction.atomic():
-                self.save()
-                Article.insertHistory(article=self, user=user, operation=3)
-            return self
-        except DatabaseError:
-            return None
+        self._change_reason = json.dumps({
+            "reason": "Delete article",
+            "user": user
+        })
+        self._history_date = datetime.now()
+        self.save()
+        return self
 
     def restore(self, user: str):
         """ active article previously disabled """
         self.is_active = True
 
-        try:
-            with transaction.atomic():
-                self.save()
-                Article.insertHistory(article=self, user=user, operation=4)
-            return self
-        except DatabaseError:
-            return None
-
-
-class HCategorie(BaseHistoryModel):
-    """ categorie history """
-    categorie = models.ForeignKey(
-        Categorie,
-        on_delete=models.RESTRICT,
-        related_name="hcategories",
-        editable=False
-    )
-    name = models.CharField(max_length=100, editable=False)
-
-
-class HArticle(BaseHistoryModel):
-    """ article history """
-    article = models.ForeignKey(
-        Article,
-        on_delete=models.RESTRICT,
-        related_name="harticles",
-        editable=False
-    )
-    name = models.CharField(max_length=100, editable=False)
+        self._change_reason = json.dumps({
+            "reason": "Restore article",
+            "user": user
+        })
+        self._history_date = datetime.now()
+        self.save()
+        return self

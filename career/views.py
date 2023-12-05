@@ -21,7 +21,8 @@ from career.serializers import (
     ReceiveTransferSerializer,
     DepotVenteArticleStoreSerializer,
     ReceiveTransferVenteSerializer,
-    SaleStoreSerializer
+    SaleStoreSerializer,
+    ReceiveVenteSerializer
 )
 from career.models import (
     StockageAera,
@@ -64,8 +65,14 @@ from . permissions import (
     IsViewAllStockagePartnerArticle,
     IsReceiveSaleTransfer,
     IsAddSale,
-    IsViewAllSale
+    IsViewAllSale,
+    IsReceiveSale
 )
+
+import http.client
+import json
+from article.models import Categorie
+from article.serializers import ArticleStoreSerializer
 
 
 class StockageAeraViewSet(viewsets.ModelViewSet):
@@ -619,7 +626,7 @@ class TransferViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         """ define permissions """
-        if self.action == 'create':
+        if self.action == 'create' or self.action == 'ptz':
             self.permission_classes = [IsAddTransfer]
         elif self.action == 'list':
             self.permission_classes = [IsViewAllTransfer]
@@ -788,6 +795,60 @@ class TransferViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+    @action(detail=False, methods=["get"])
+    def ptz(self, request, pk=None):
+        """ import careers, stockage """
+        conn1 = http.client.HTTPSConnection('bfc.api.zukulufeg.com')
+        payload1 = ''
+        headers1 = {
+            "Authorization": 'd3f46689-b1bc-4ab5-947b-968367a54982:04-06-2023-14-01-16'
+        }
+        conn1.request("GET", "/api/transfert", payload1, headers1)
+        response1 = conn1.getresponse()
+        data = json.loads(response1.read())
+        d = data['data']
+        transfers = []
+        user=self.request.infoUser["id"]
+        for item in d:
+            nom_article = item['nom']
+            try:
+                article = Article.objects.get(name=nom_article)
+            except Article.DoesNotExist:
+                categorie = Categorie.create(name='sable', user=user)
+                article = Article.create(
+                    name=nom_article,
+                    categorie=categorie,
+                    user=user
+                )
+            nom_career = item['carriere']['nom']
+            try:
+                career = Carriere.objects.get(name=nom_career)
+            except Carriere.DoesNotExist:
+                career = Carriere.create(
+                    name=nom_career,
+                    village="non defini",
+                    uin="aaaaaaaaaaaaa",
+                    localisation="non definie",
+                    proprio="non defini",
+                    user=user
+                )
+                CareerArticle.create(
+                    career=career,
+                    article=article,
+                    
+                )
+            nom_stockage = item['stockage']['nom']
+            transfert = Transfer.create()
+            transfers.push(transfert)
+        return Response(
+            TransferStoreSerializer(
+                transfers,
+                context={"request": request},
+                many=True
+            ).data,
+            status=status.HTTP_201_CREATED
+        )
+
 
 class StockagePartnerArticleViewSet(viewsets.ModelViewSet):
     """ stockage partner article controller """
@@ -877,9 +938,7 @@ class SaleViewSet(viewsets.ModelViewSet):
         elif self.action == 'list':
             self.permission_classes = [IsViewAllSale]
         elif self.action == 'reception':
-            self.permission_classes = [IsReceiveTransfer]
-        elif self.action == 'receptionvente':
-            self.permission_classes = [IsReceiveSaleTransfer]
+            self.permission_classes = [IsReceiveSale]
         else:
             self.permission_classes = [IsDeactivate]
         return super().get_permissions()
@@ -961,75 +1020,24 @@ class SaleViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def reception(self, request, pk):
-        """ to receive a transfer """
-        transfer = self.get_object()
-        serializer = ReceiveTransferSerializer(
+        """ to receive sale """
+        sale = self.get_object()
+        serializer = ReceiveVenteSerializer(
             data=request.data,
             context={
                 "request": request,
-                "transfer": transfer
+                "sale": sale
             }
         )
         if serializer.is_valid():
-            transfer.reception(
+            sale.reception(
                 date_recep=serializer.validated_data['date_recep'],
                 volume=serializer.validated_data["volume_receptionned"],
                 user=self.request.infoUser["id"]
             )
             return Response(
-                TransferStoreSerializer(
-                    transfer,
-                    context={
-                        "request": request
-                    },
-                ).data,
-                status=status.HTTP_200_OK
-            )
-        else:
-            return Response(
-                serializer.errors,
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-    @action(detail=True, methods=['post'])
-    def receptionvente(self, request, pk):
-        """ to receive a transfer plus sale """
-        transfer = self.get_object()
-        serializer = ReceiveTransferVenteSerializer(
-            data=request.data,
-            context={
-                "request": request,
-                "transfer": transfer
-            }
-        )
-        if serializer.is_valid():
-            if serializer.validated_data['stockage_partner_id'] != 'Autre':
-                stockage_partner = StockagePartner.readByToken(
-                    serializer.validated_data['stockage_partner_id']
-                )
-                stock_partner_art = StockagePartnerArticle.objects.get(
-                    stockage_partner=stockage_partner,
-                    article=transfer.article,
-                    stockage_aera=transfer.stockage_aera
-                )
-                sale_unit_price = stock_partner_art.price_sale
-                destination = stockage_partner.name
-            else:
-                stockage_partner = None
-                sale_unit_price = serializer.validated_data['sale_unit_price']
-                destination = serializer.validated_data['destination']
-
-            transfer.receptionVente(
-                date_recep=serializer.validated_data['date_recep'],
-                destination=destination,
-                sale_unit_price=sale_unit_price,
-                stockagePartner=stockage_partner,
-                volume=serializer.validated_data['volume_receptionned'],
-                user=self.request.infoUser["id"]
-            )
-            return Response(
-                TransferStoreSerializer(
-                    transfer,
+                SaleStoreSerializer(
+                    sale,
                     context={
                         "request": request
                     },

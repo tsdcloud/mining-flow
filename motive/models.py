@@ -1,6 +1,7 @@
 from django.db import models
-from django.db import DatabaseError, transaction
-from common.models import BaseUUIDModel, BaseHistoryModel
+from common.models import BaseUUIDModel
+import json
+from datetime import datetime
 
 # Create your models here.
 
@@ -19,21 +20,6 @@ class Motive(BaseUUIDModel):
     def __str__(self):
         """ name in the administration """
         return "(%s %s)" % (self.suspension_name, self.active_name)
-
-    @staticmethod
-    def insertHistory(motive: "Motive", user: str, operation: int):
-        hmotive = HMotive()
-        hmotive.motive = motive
-        hmotive.suspension_name = motive.suspension_name
-        hmotive.active_name = motive.active_name
-        hmotive.service = motive.service
-        hmotive.special_active = motive.special_active
-        hmotive.is_active = motive.is_active
-        hmotive.date = motive.date
-        hmotive.operation = operation
-        hmotive.user = user
-
-        hmotive.save()
 
     @staticmethod
     def create(
@@ -56,13 +42,13 @@ class Motive(BaseUUIDModel):
         motive.active_name = active_name.upper()
         motive.special_active = special_active
 
-        try:
-            with transaction.atomic():
-                motive.save()
-                Motive.insertHistory(motive=motive, user=user, operation=1)
-            return motive
-        except DatabaseError:
-            return None
+        motive._change_reason = json.dumps({
+            "reason": "Add a new motive",
+            "user": user
+        })
+        motive._history_date = datetime.now()
+        motive.save()
+        return motive
 
     def change(
         self,
@@ -76,48 +62,34 @@ class Motive(BaseUUIDModel):
         self.active_name = active_name.upper()
         self.special_active = special_active
 
-        try:
-            with transaction.atomic():
-                self.save()
-                Motive.insertHistory(motive=self, user=user, operation=2)
-            return self
-        except DatabaseError:
-            return None
+        self._change_reason = json.dumps({
+            "reason": "Update motive",
+            "user": user
+        })
+        self._history_date = datetime.now()
+        self.save()
+        return self
 
     def delete(self, user: str):
         """ delete motive """
         self.is_active = False
 
-        try:
-            with transaction.atomic():
-                self.save()
-                Motive.insertHistory(motive=self, user=user, operation=3)
-            return self
-        except DatabaseError:
-            return None
+        self._change_reason = json.dumps({
+            "reason": "Delete motive",
+            "user": user
+        })
+        self._history_date = datetime.now()
+        self.save()
+        return self
 
     def restore(self, user: str):
         """ active motive previously disabled """
         self.is_active = True
 
-        try:
-            with transaction.atomic():
-                self.save()
-                Motive.insertHistory(motive=self, user=user, operation=4)
-            return self
-        except DatabaseError:
-            return None
-
-
-class HMotive(BaseHistoryModel):
-    """ motive history """
-    motive = models.ForeignKey(
-        Motive,
-        on_delete=models.RESTRICT,
-        related_name="hmotive",
-        editable=False
-    )
-    suspension_name = models.CharField(max_length=100)
-    active_name = models.CharField(max_length=100)
-    service = models.CharField(max_length=1000)
-    special_active = models.BooleanField(default=False)
+        self._change_reason = json.dumps({
+            "reason": "Restore motive",
+            "user": user
+        })
+        self._history_date = datetime.now()
+        self.save()
+        return self

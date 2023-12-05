@@ -395,3 +395,18 @@ class IsViewAllSale(BasePermission):
                 return True
             else:
                 return False
+
+
+class IsReceiveSale(BasePermission):
+    """ receive sale """
+    def has_permission(self, request, view):
+        if request.infoUser is None:
+            return False
+        else:
+            user = request.infoUser
+            if user['member'].get('is_superuser') is True:
+                return True
+            elif 'receive_sale' in user['member']['user_permissions']:
+                return True
+            else:
+                return False

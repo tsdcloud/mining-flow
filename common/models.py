@@ -1,6 +1,7 @@
 import uuid as uuid
 from django.db import models
 from common.constants import H_OPERATION_CHOICE
+from simple_history.models import HistoricalRecords
 
 
 class BaseUUIDModel(models.Model):
@@ -11,6 +12,16 @@ class BaseUUIDModel(models.Model):
         primary_key=True, default=uuid.uuid4, db_index=True, editable=False)
     is_active = models.BooleanField(default=True)
     date = models.DateTimeField(auto_now_add=True, blank=True, editable=False)
+    __history_date = None
+    history = HistoricalRecords()
+
+    @property
+    def _history_date(self):
+        return self.__history_date
+
+    @_history_date.setter
+    def _history_date(self, value):
+        self.__history_date = value
 
     class Meta:
         abstract = True

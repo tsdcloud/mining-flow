@@ -1,7 +1,7 @@
 from django.db import models
-from django.db import DatabaseError, transaction
-from common.models import BaseUUIDModel, BaseHistoryModel
-
+from common.models import BaseUUIDModel
+import json
+from datetime import datetime
 # Create your models here.
 
 
@@ -19,22 +19,6 @@ class Tractor(BaseUUIDModel):
     def __str__(self):
         """ name in the administration """
         return "(%s)" % (self.registration)
-
-    @staticmethod
-    def insertHistory(tractor: "Tractor", user: str, operation: int):
-        htractor = HTractor()
-        htractor.tractor = tractor
-        htractor.registration = tractor.registration
-        htractor.serial_number = tractor.serial_number
-        htractor.brand = tractor.brand
-        htractor.model = tractor.model
-        htractor.is_used = tractor.is_used
-        htractor.is_active = tractor.is_active
-        htractor.date = tractor.date
-        htractor.operation = operation
-        htractor.user = user
-
-        htractor.save()
 
     @staticmethod
     def create(
@@ -59,14 +43,13 @@ class Tractor(BaseUUIDModel):
         tractor.brand = brand.upper()
         tractor.model = model.upper()
 
-        try:
-            with transaction.atomic():
-                tractor.save()
-                Tractor.insertHistory(
-                    tractor=tractor, user=user, operation=1)
-            return tractor
-        except DatabaseError:
-            return None
+        tractor._change_reason = json.dumps({
+            "reason": "Add a new tractor",
+            "user": user
+        })
+        tractor._history_date = datetime.now()
+        tractor.save()
+        return tractor
 
     def change(
         self,
@@ -82,53 +65,49 @@ class Tractor(BaseUUIDModel):
         self.brand = brand.upper()
         self.model = model.upper()
 
-        try:
-            with transaction.atomic():
-                self.save()
-                Tractor.insertHistory(
-                    tractor=self, user=user, operation=2)
-            return self
-        except DatabaseError:
-            return None
+        self._change_reason = json.dumps({
+            "reason": "Update tractor",
+            "user": user
+        })
+        self._history_date = datetime.now()
+        self.save()
+        return self
 
     def delete(self, user: str):
         """ delete tractor """
         self.is_active = False
 
-        try:
-            with transaction.atomic():
-                self.save()
-                Tractor.insertHistory(
-                    tractor=self, user=user, operation=3)
-            return self
-        except DatabaseError:
-            return None
+        self._change_reason = json.dumps({
+            "reason": "Delete tractor",
+            "user": user
+        })
+        self._history_date = datetime.now()
+        self.save()
+        return self
 
     def restore(self, user: str):
         """ restore tractor previously disabled """
         self.is_active = True
 
-        try:
-            with transaction.atomic():
-                self.save()
-                Tractor.insertHistory(
-                    tractor=self, user=user, operation=4)
-            return self
-        except DatabaseError:
-            return None
+        self._change_reason = json.dumps({
+            "reason": "Restore tractor",
+            "user": user
+        })
+        self._history_date = datetime.now()
+        self.save()
+        return self
 
     def status_used(self, user: str):
         """ change attribut is_used """
         self.is_used = not self.is_used
 
-        try:
-            with transaction.atomic():
-                self.save()
-                Tractor.insertHistory(
-                    tractor=self, user=user, operation=6)
-            return self
-        except DatabaseError:
-            return None
+        self._change_reason = json.dumps({
+            "reason": "Change the tractor's operating state",
+            "user": user
+        })
+        self._history_date = datetime.now()
+        self.save()
+        return self
 
 
 class Trailer(BaseUUIDModel):
@@ -146,23 +125,6 @@ class Trailer(BaseUUIDModel):
     def __str__(self):
         """ name in the administration """
         return "(%s)" % (self.registration)
-
-    @staticmethod
-    def insertHistory(trailer: "Trailer", user: str, operation: int):
-        htrailer = HTrailer()
-        htrailer.trailer = trailer
-        htrailer.registration = trailer.registration
-        htrailer.serial_number = trailer.serial_number
-        htrailer.brand = trailer.brand
-        htrailer.model = trailer.model
-        htrailer.empty_volume = trailer.empty_volume
-        htrailer.is_used = trailer.is_used
-        htrailer.is_active = trailer.is_active
-        htrailer.date = trailer.date
-        htrailer.operation = operation
-        htrailer.user = user
-
-        htrailer.save()
 
     @staticmethod
     def create(
@@ -189,14 +151,13 @@ class Trailer(BaseUUIDModel):
         trailer.model = model.upper()
         trailer.empty_volume = empty_volume
 
-        try:
-            with transaction.atomic():
-                trailer.save()
-                Trailer.insertHistory(
-                    trailer=trailer, user=user, operation=1)
-            return trailer
-        except DatabaseError:
-            return None
+        trailer._change_reason = json.dumps({
+            "reason": "Add a new trailer",
+            "user": user
+        })
+        trailer._history_date = datetime.now()
+        trailer.save()
+        return trailer
 
     def change(
         self,
@@ -214,81 +175,46 @@ class Trailer(BaseUUIDModel):
         self.model = model.upper()
         self.empty_volume = empty_volume
 
-        try:
-            with transaction.atomic():
-                self.save()
-                Trailer.insertHistory(
-                    trailer=self, user=user, operation=2)
-            return self
-        except DatabaseError:
-            return None
+        self._change_reason = json.dumps({
+            "reason": "Update trailer",
+            "user": user
+        })
+        self._history_date = datetime.now()
+        self.save()
+        return self
 
     def delete(self, user: str):
         """ delete trailer """
         self.is_active = False
 
-        try:
-            with transaction.atomic():
-                self.save()
-                Trailer.insertHistory(
-                    trailer=self, user=user, operation=3)
-            return self
-        except DatabaseError:
-            return None
+        self._change_reason = json.dumps({
+            "reason": "Delete trailer",
+            "user": user
+        })
+        self._history_date = datetime.now()
+        self.save()
+        return self
 
     def restore(self, user: str):
         """ restore trailer previously disabled """
         self.is_active = True
 
-        try:
-            with transaction.atomic():
-                self.save()
-                Trailer.insertHistory(
-                    trailer=self, user=user, operation=4)
-            return self
-        except DatabaseError:
-            return None
+        self._change_reason = json.dumps({
+            "reason": "Restore trailer",
+            "user": user
+        })
+        self._history_date = datetime.now()
+        self.save()
+        return self
 
     def status_used(self, user: str):
         """ change attribut is_used """
         self.is_used = not self.is_used
 
-        try:
-            with transaction.atomic():
-                self.save()
-                Trailer.insertHistory(
-                    trailer=self, user=user, operation=6)
-            return self
-        except DatabaseError:
-            return None
-
-
-class HTractor(BaseHistoryModel):
-    """ Tractor history """
-    tractor = models.ForeignKey(
-        Tractor,
-        on_delete=models.RESTRICT,
-        related_name="htractors",
-        editable=False
-    )
-    registration = models.CharField(max_length=30)
-    serial_number = models.CharField(max_length=30)
-    brand = models.CharField(max_length=30)
-    model = models.CharField(max_length=30)
-    is_used = models.BooleanField(default=False)
-
-
-class HTrailer(BaseHistoryModel):
-    """ Trailer history """
-    trailer = models.ForeignKey(
-        Trailer,
-        on_delete=models.RESTRICT,
-        related_name="htrailers",
-        editable=False
-    )
-    registration = models.CharField(max_length=30)
-    serial_number = models.CharField(max_length=30)
-    brand = models.CharField(max_length=30)
-    model = models.CharField(max_length=30)
-    empty_volume = models.FloatField()
-    is_used = models.BooleanField(default=False)
+        self._change_reason = json.dumps({
+            "reason": "Change the trailer's operating state",
+            "user": user
+        })
+        self._history_date = datetime.now()
+        self.save()
+        return self

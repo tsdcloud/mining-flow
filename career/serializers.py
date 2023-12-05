@@ -993,6 +993,21 @@ class TransferStoreSerializer(serializers.HyperlinkedModelSerializer):
                 detail='career article stockage aera unauthorized'
             )
 
+        try:
+            lv = CareerLv.objects.get(career=career)
+            if 1 > lv.available_quantity:
+                raise serializers.ValidationError(
+                    detail='career has not a lv'
+                )
+            if data['volume_transferred'] > lv.available_volume:
+                raise serializers.ValidationError(
+                    detail='career has not lv availlable for this volume'
+                )
+        except CareerLv.DoesNotExist:
+            raise serializers.ValidationError(
+                detail='career has not available lv'
+            )
+
         if depot.career != career:
             raise serializers.ValidationError(
                 detail='depot unauthorized'
@@ -1427,6 +1442,36 @@ class SaleStoreSerializer(serializers.HyperlinkedModelSerializer):
                 stockage_aera=stockage_aera,
                 user=request.infoUser.get('id')
             )
+            try:
+                lv = StockageAeraLv.objects.get(
+                    stockageaera=stockage_aera
+                )
+                if 1 > lv.available_quantity:
+                    raise serializers.ValidationError(
+                        detail='Hub minier has not available lv'
+                    )
+                if data['volume'] > lv.available_volume:
+                    raise serializers.ValidationError(
+                        detail='Hub minier has not this volume in available lv'
+                    )
+            except StockageAeraLv.DoesNotExist:
+                raise serializers.ValidationError(
+                    detail='lv Hub minier not found'
+                )
+            if data['stockage_partner_id'] != 'Autre':
+                stockage_partner = StockagePartner.objects.get(
+                    id=data['stockage_partner_id']
+                )
+                try:
+                    StockagePartnerArticle.objects.get(
+                        article=article,
+                        stockage_partner=stockage_partner,
+                        stockage_aera=stockage_aera
+                    )
+                except StockagePartnerArticle.DoesNotExist:
+                    raise serializers.ValidationError(
+                        detail='Hub minier, Sale depot and article is not configure'
+                    )
         else:
             try:
                 stockage_partner = StockagePartner.objects.get(
@@ -1446,6 +1491,68 @@ class SaleStoreSerializer(serializers.HyperlinkedModelSerializer):
 
         if volume > product_balance.balance:
             raise serializers.ValidationError(
-                detail='insufficient available volume ' + str(product_balance.balance)
+                detail='insufficient available volume ' + str(
+                    product_balance.balance
+                )
+            )
+        return data
+
+
+class ReceiveVenteSerializer(serializers.HyperlinkedModelSerializer):
+    date_recep = serializers.CharField(required=True)
+    volume_receptionned = serializers.FloatField(required=True)
+
+    class Meta:
+        """ attributs serialized """
+        model = Transfer
+        fields = [
+            'date_recep',
+            'volume_receptionned'
+        ]
+
+    def validate_volume_receptionned(self, value):
+        """ check logical validity of volume_transferred """
+        sale = self.context['sale']
+        if 0 > value:
+            raise serializers.ValidationError(
+                detail='volume receptionned is small'
+            )
+        elif value > sale.volume:
+            raise serializers.ValidationError(
+                detail='volume receptionned is long'
+            )
+        else:
+            return value
+
+    def validate_date_recep(self, value):
+        """ check logical validity of date_recep """
+        try:
+            date_recep = datetime.datetime.strptime(value, '%d-%m-%Y %H:%M')
+            utc = pytz.UTC
+            current_date = datetime.datetime.now()
+            date_recep = date_recep.replace(tzinfo=utc)
+            current_date = current_date.replace(tzinfo=utc)
+            if date_recep > current_date:
+                raise serializers.ValidationError(
+                    detail='check the date of operation'
+                )
+            sale = self.context['sale']
+            date_op = sale.date_op.replace(tzinfo=utc)
+            if date_op > date_recep:
+                raise serializers.ValidationError(
+                    detail='check the reception date'
+                )
+        except ValueError:
+            raise serializers.ValidationError(
+                detail="not valid date format"
+            )
+        return value
+
+    def validate(self, data):
+        """ check logical validity of transfer """
+        sale = self.context['sale']
+        if sale.status != 1:
+            raise serializers.ValidationError(
+                detail='sale is not pending'
             )
         return data
